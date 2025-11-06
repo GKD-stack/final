@@ -1,17 +1,49 @@
+
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { TrendingUp, TrendingDown, Clock, AlertCircle } from 'lucide-react';
 
 const MacroDashboard = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Fetch real data from API
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/macro-data');
+        const json = await response.json();
+        
+        if (json.error) {
+          setError(json.message || 'Failed to fetch data');
+        } else {
+          setData(json);
+          setError(null);
+        }
+        setLoading(false);
+      } catch (err) {
+        console.error('Error fetching data:', err);
+        setError('Failed to connect to data source');
+        setLoading(false);
+      }
+    }
+    
+    fetchData();
+    // Refresh every 15 minutes
+    const interval = setInterval(fetchData, 15 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Mock data for charts
-  const inflationTrend = [
+  // Use real data or fallback to mock data
+  const inflationTrend = data?.history?.inflation || [
     { month: 'May', cpi: 4.2, core: 4.8 },
     { month: 'Jun', cpi: 3.9, core: 4.6 },
     { month: 'Jul', cpi: 3.6, core: 4.4 },
@@ -19,7 +51,7 @@ const MacroDashboard = () => {
     { month: 'Sep', cpi: 3.2, core: 4.0 }
   ];
 
-  const rateTrend = [
+  const rateTrend = data?.history?.rates || [
     { month: 'May', rate: 5.33, yield: 4.18 },
     { month: 'Jun', rate: 5.33, yield: 4.25 },
     { month: 'Jul', rate: 5.33, yield: 4.35 },
@@ -27,7 +59,7 @@ const MacroDashboard = () => {
     { month: 'Sep', rate: 5.33, yield: 4.57 }
   ];
 
-  const sectorData = [
+  const sectorData = data?.sectors || [
     { sector: 'Energy', sensitivity: 0.72 },
     { sector: 'Financials', sensitivity: 0.45 },
     { sector: 'Utilities', sensitivity: -0.35 },
