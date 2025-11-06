@@ -43,21 +43,21 @@ const MacroDashboard = () => {
   }, []);
 
   // Use real data or fallback to mock data
-  const inflationTrend = data?.history?.inflation || [
+  const inflationTrend = (data?.history?.inflation || [
     { month: 'May', cpi: 4.2, core: 4.8 },
     { month: 'Jun', cpi: 3.9, core: 4.6 },
     { month: 'Jul', cpi: 3.6, core: 4.4 },
     { month: 'Aug', cpi: 3.4, core: 4.2 },
     { month: 'Sep', cpi: 3.2, core: 4.0 }
-  ];
+  ]).filter(d => d.cpi !== null && d.core !== null); // Filter out null values
 
-  const rateTrend = data?.history?.rates || [
+  const rateTrend = (data?.history?.rates || [
     { month: 'May', rate: 5.33, yield: 4.18 },
     { month: 'Jun', rate: 5.33, yield: 4.25 },
     { month: 'Jul', rate: 5.33, yield: 4.35 },
     { month: 'Aug', rate: 5.33, yield: 4.45 },
     { month: 'Sep', rate: 5.33, yield: 4.57 }
-  ];
+  ]).filter(d => d.rate !== null && d.yield !== null); // Filter out null values
 
   const sectorData = data?.sectors || [
     { sector: 'Energy', sensitivity: 0.72 },
@@ -86,6 +86,36 @@ const MacroDashboard = () => {
     </div>
   );
 
+  // Show loading state
+  if (loading && !data) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center" style={{ fontFamily: 'Times New Roman, serif' }}>
+        <div className="text-center">
+          <div className="text-xl mb-2">Loading macro data...</div>
+          <div className="text-sm text-gray-600">Fetching latest indicators</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center" style={{ fontFamily: 'Times New Roman, serif' }}>
+        <div className="text-center max-w-md">
+          <div className="text-xl mb-2 text-red-600">Error Loading Data</div>
+          <div className="text-sm text-gray-600 mb-4">{error}</div>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="border border-gray-400 px-4 py-2 hover:bg-gray-100"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-6" style={{ fontFamily: 'Times New Roman, serif' }}>
       {/* Header */}
@@ -102,8 +132,15 @@ const MacroDashboard = () => {
               <Clock size={14} className="mr-1" />
               {currentTime.toLocaleTimeString()}
             </div>
-            <button className="text-xs border border-gray-400 px-3 py-1 hover:bg-gray-100">
-              Refresh Data
+            <button 
+              onClick={() => {
+                setLoading(true);
+                fetch('/api/macro-data').then(r => r.json()).then(setData).finally(() => setLoading(false));
+              }}
+              className="text-xs border border-gray-400 px-3 py-1 hover:bg-gray-100"
+              disabled={loading}
+            >
+              {loading ? 'Refreshing...' : 'Refresh Data'}
             </button>
           </div>
         </div>
@@ -117,8 +154,11 @@ const MacroDashboard = () => {
             <div>
               <h3 className="font-bold mb-2" style={{ fontFamily: 'Times New Roman, serif' }}>Market Insight</h3>
               <p className="text-sm leading-relaxed" style={{ fontFamily: 'Times New Roman, serif' }}>
-                Inflation declining with CPI at 3.2%. Real rates remain restrictive at 2.13%, suggesting continued 
-                pressure on growth sectors. Wage growth at 4.3% exceeds inflation, supporting consumer spending.
+                Inflation {data?.metrics?.cpi?.value > 3.5 ? 'elevated' : 'declining'} with CPI at {data?.metrics?.cpi?.value?.toFixed(1) || '3.2'}%. 
+                Real rates {data?.derived?.realRate?.value > 1.5 ? 'remain restrictive' : 'moderating'} at {data?.derived?.realRate?.value?.toFixed(2) || '2.13'}%, 
+                suggesting {data?.derived?.realRate?.value > 1.5 ? 'continued pressure on growth sectors' : 'easing conditions'}. 
+                Wage growth at {data?.metrics?.wageGrowth?.value?.toFixed(1) || '4.3'}% {data?.metrics?.wageGrowth?.value > data?.metrics?.cpi?.value ? 'exceeds' : 'trails'} inflation.
+                {data?.cached && <span className="text-xs text-gray-500 block mt-2">Data cached {data.cacheAge} min ago</span>}
               </p>
             </div>
           </div>
@@ -128,14 +168,14 @@ const MacroDashboard = () => {
         <div>
           <h2 className="text-xl font-bold mb-3" style={{ fontFamily: 'Times New Roman, serif' }}>Core Indicators</h2>
           <div className="grid grid-cols-4 gap-3">
-            <Metric label="Consumer Price Index" value="3.2" unit="%" change={-0.5} />
-            <Metric label="Core CPI (ex Food/Energy)" value="4.0" unit="%" change={-0.1} />
-            <Metric label="Federal Funds Rate" value="5.33" unit="%" />
-            <Metric label="10Y Treasury Yield" value="4.57" unit="%" change={0.22} />
-            <Metric label="Wage Growth (YoY)" value="4.3" unit="%" change={-0.2} />
-            <Metric label="Real Earnings Growth" value="0.5" unit="%" change={0.3} />
-            <Metric label="Unemployment Rate" value="3.8" unit="%" change={-0.1} />
-            <Metric label="S&P 500 P/E Ratio" value="19.2" unit="x" change={0.4} />
+            <Metric label="Consumer Price Index" value={data?.metrics?.cpi?.value?.toFixed(1) || "3.2"} unit="%" change={data?.metrics?.cpi?.change} />
+            <Metric label="Core CPI (ex Food/Energy)" value={data?.metrics?.coreCPI?.value?.toFixed(1) || "4.0"} unit="%" change={data?.metrics?.coreCPI?.change} />
+            <Metric label="Federal Funds Rate" value={data?.metrics?.fedRate?.value?.toFixed(2) || "5.33"} unit="%" />
+            <Metric label="10Y Treasury Yield" value={data?.metrics?.treasury10y?.value?.toFixed(2) || "4.57"} unit="%" change={data?.metrics?.treasury10y?.change} />
+            <Metric label="Wage Growth (YoY)" value={data?.metrics?.wageGrowth?.value?.toFixed(1) || "4.3"} unit="%" change={data?.metrics?.wageGrowth?.change} />
+            <Metric label="Real Earnings Growth" value={data?.metrics?.realEarningsGrowth?.value?.toFixed(1) || "0.5"} unit="%" change={data?.metrics?.realEarningsGrowth?.change} />
+            <Metric label="Unemployment Rate" value={data?.metrics?.unemployment?.value?.toFixed(1) || "3.8"} unit="%" change={data?.metrics?.unemployment?.change} />
+            <Metric label="S&P 500 P/E Ratio" value={data?.metrics?.sp500PE?.value?.toFixed(1) || "19.2"} unit="x" change={data?.metrics?.sp500PE?.change} />
           </div>
         </div>
 
@@ -143,9 +183,9 @@ const MacroDashboard = () => {
         <div>
           <h2 className="text-xl font-bold mb-3" style={{ fontFamily: 'Times New Roman, serif' }}>Derived Metrics</h2>
           <div className="grid grid-cols-3 gap-3">
-            <Metric label="Real Interest Rate (Fed - CPI)" value="2.13" unit="%" change={-0.5} />
-            <Metric label="Inflation Momentum (MoM)" value="-0.5" unit="%" change={0.2} />
-            <Metric label="Inflation vs Expected (3.0%)" value="+0.2" unit="%" />
+            <Metric label="Real Interest Rate (Fed - CPI)" value={data?.derived?.realRate?.value?.toFixed(2) || "2.13"} unit="%" change={data?.derived?.realRate?.change} />
+            <Metric label="Inflation Momentum (MoM)" value={data?.derived?.inflationMomentum?.value?.toFixed(1) || "-0.5"} unit="%" change={data?.derived?.inflationMomentum?.change} />
+            <Metric label="Inflation vs Expected (3.0%)" value={data?.derived?.inflationSurprise?.value?.toFixed(1) || "+0.2"} unit="%" />
           </div>
         </div>
 
@@ -291,7 +331,7 @@ const MacroDashboard = () => {
               Next FOMC Meeting
             </div>
             <div className="text-xl font-bold" style={{ fontFamily: 'Times New Roman, serif' }}>
-              Dec 17-18, 2024
+              {data?.fomc?.nextMeeting || 'Dec 17-18, 2024'}
             </div>
           </div>
           <div className="bg-white border border-gray-300 p-4 col-span-2">
@@ -300,7 +340,9 @@ const MacroDashboard = () => {
             </div>
             <div className="flex items-baseline">
               <span className="text-xl font-bold mr-2" style={{ fontFamily: 'Times New Roman, serif' }}>Hold</span>
-              <span className="text-3xl font-bold" style={{ fontFamily: 'Times New Roman, serif' }}>88%</span>
+              <span className="text-3xl font-bold" style={{ fontFamily: 'Times New Roman, serif' }}>
+                {data?.fomc?.holdProbability || 88}%
+              </span>
             </div>
           </div>
         </div>
